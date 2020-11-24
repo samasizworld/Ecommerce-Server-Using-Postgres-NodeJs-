@@ -1,12 +1,24 @@
 const asyncHandler = require('express-async-handler');
+const { Sequelize } = require('../models');
 const db = require('../models');
+const Op = Sequelize.Op;
+
+//Search
+const searchProducts = asyncHandler(async (req, res) => {
+  const { keyword } = req.query;
+  const products = await db.products.findAll({
+    where: { name: { [Op.like]: '%' + keyword + '%' } },
+    include: [db.reviews],
+  }); // Select * from products
+  res.json(products);
+});
 
 // @desc -Fetch all products
 //routes - api/products
 //access - public
 const getProducts = asyncHandler(async (req, res) => {
-  const products = await db.products.findAll({ include: [db.reviews] }); // Select * from products
-  res.json(products);
+  const products = await db.products.findAll({ include: [db.reviews] });
+  res.json({ products });
 });
 
 // @desc -Fetch single product
@@ -86,10 +98,55 @@ const updateProductById = asyncHandler(async (req, res) => {
   }
 });
 
+//desc -createReview
+//route- POST api/products/:id/review
+//acess-private
+const createProductReview = asyncHandler(async (req, res) => {
+  const { rating, comment } = req.body;
+  const product = await db.products.findByPk(req.params.id, {
+    include: [db.reviews],
+  });
+  if (product) {
+    const alreadyReviewed = await product.reviews.find(
+      (review) => review.userId.toString() === req.user.id.toString()
+    );
+    if (alreadyReviewed) {
+      res.status(400);
+      throw new Error('Product already reviewed');
+    } else {
+      await db.reviews.create({
+        name: req.user.name,
+        rating,
+        comment,
+        productId: req.params.id,
+        userId: req.user.id,
+      });
+      const productWithReview = await db.products.findByPk(req.params.id, {
+        include: [db.reviews],
+      });
+
+      productWithReview.numReviews = productWithReview.reviews.length;
+      productWithReview.rating =
+        productWithReview.reviews.reduce(
+          (total, item) => item.rating + total,
+          0
+        ) / productWithReview.reviews.length;
+
+      await productWithReview.save();
+      res.status(201).json({ message: 'Review Added' });
+    }
+  } else {
+    res.status(404);
+    throw new Error('Product not found');
+  }
+});
+
 module.exports = {
   getProducts,
   getProductById,
   deleteProductById,
   createProduct,
   updateProductById,
+  createProductReview,
+  searchProducts,
 };

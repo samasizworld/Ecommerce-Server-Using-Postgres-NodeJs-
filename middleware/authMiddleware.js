@@ -14,9 +14,7 @@ const auth = asyncHandler(async (req, res, next) => {
       const jwt_privatekey = 'jwtsecret';
       const decoded = await jwt.verify(token, jwt_privatekey); // decpded gives user id that we sent as payload & issued at
       //& expires at
-      console.log(decoded);
       req.user = await db.users.findByPk(decoded.id);
-      console.log(req.user);
       next();
     } catch (err) {
       console.error(err);
